@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "snmp-notifier.fullname" . }}
+  labels:
+    app: {{ template "snmp-notifier.name" . }}
+    chart: {{ template "snmp-notifier.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ template "snmp-notifier.name" . }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ template "snmp-notifier.name" . }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.image.spec.containers.containerPort }}
+              protocol: TCP
+          env:
+          - name: "snmpCommunityEnvironmentVariable"
+            value: {{ .Values.image.spec.containers.snmpCommunity }}
+          args: 
+            {{- range $key, $value := .Values.image.spec.containers.args }}
+              {{- if $value }}
+              - --{{ $key }}={{ $value }}
+              {{- else }}
+              - --{{ $key }}
+              {{- end }}
+            {{- end }}
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}

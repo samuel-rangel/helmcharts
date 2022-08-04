@@ -1,0 +1,1158 @@
+sftpServerTest:
+  enabled: false
+  host: 10.96.22.10
+  image: atmoz/sftp:latest
+  port: 22
+  config: foo:pass:1000:1000:/upload
+  configPath: /home/foo/upload/
+
+#pvc values
+volumeClaimTemplate:
+  name: spring-pv-claim
+  accessModes: ["ReadWriteOnce"]
+  size: 2Gi
+  classname: manual
+
+#spring app values
+spring:
+  replicaCount: 1
+  image:
+    repository: samuelrangel/upm_collector
+    pullPolicy: IfNotPresent
+    tag: "v2.1"
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 100
+    targetCPUUtilizationPercentage: 80
+    # targetMemoryUtilizationPercentage: 80
+  volumeMounts:
+    mountPath: /data
+    name: spring-volume
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8082
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+podAnnotations: {}
+
+secret:
+  name: spring-sftp-privatekey
+  mountPath: /root/.ssh
+  privatekey: |
+    -----BEGIN RSA PRIVATE KEY-----
+    -----END RSA PRIVATE KEY-----
+
+
+configmap:
+  name: spring-config
+  properties: |
+    management.endpoint.gateway.enabled=true
+    management.endpoints.web.exposure.include=*
+    logging.level.root=info
+    #spring.main.web-application-type=reactive
+    management.endpoint.health.show-details=always
+
+    management.endpoints.web.cors.allowed-origins=*
+    management.endpoints.web.cors.allowed-methods=OPTIONS, GET, POST
+    management.endpoints.web.cors.allowed-headers=*
+
+    spring.datasource.url=jdbc:sqlite:litedb.db
+    spring.datasource.driver-class-name=org.sqlite.JDBC
+    spring.jpa.database-platform=com.oracle.upm_metrics_collector.configs.SQLiteDialect
+
+    #cluster name for file prefix
+    cluster-name=tph14
+
+    #seconds for file expiration time
+    file-expire-time=259200
+    folder-save-files=/data
+
+    #set sftp-connection to true if file transfer
+    #if sftp-connection is set false, other parameters should be set to null but not empty
+    sftp-connection=false
+    #sftp connection required credentials
+    sftp-username=foo
+    sftp-host=192.168.1.155
+    sftp-port=2222
+    sftp-remote-dir=/upload
+    #password or private key auth method?
+    #private key must be PEM
+    #sftp-keyPath is included as a secret and stfp-pass should be set to null but not empty
+    sftp-keyPath=null
+    sftp-keyPassphrase=null
+    sftp-pass=pass
+
+    #prometheus server service
+    prom-host=http://144.22.225.35:8080/api/v1/query?query=
+
+    #A Cron expression consists of six sequential fields
+    #second, minute, hour, day of month, month, day(s) of week
+    #set metrics-schedule=- to disable the scheduler 
+    metrics-schedule=0 */5 * * * *
+    cleaner-schedule=0 0 0 */3 * *  
+
+  metrics: |
+    config:
+      projectName: converged-policy
+      platforms:
+      -
+        name: CNCC
+        namespace: cpcfdph01-cncc-occnp
+        metrics:
+          -
+            name: CNCC Core Requests
+            description: Total number of requests received by CNCC Core
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway"}
+            time_range: 5m
+          -
+            name: CNCC Core Responses
+            description: Total number of responses for CNCC Core requests
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway"}
+            time_range: 5m
+          -
+            name: CNCC Core Success Responses
+            description: Total number of success responses (2xx) for CNCC Core requests
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status=~"2.*"}
+            time_range: 5m
+          -
+            name: CNCC Core 5xx Responses
+            description: Total number of error responses (5xx) for CNCC Core requests
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status=~"5.*"}
+            time_range: 5m
+          -
+            name: CNCC Core 4xx Responses
+            description: Total number of error responses (4xx) for CNCC Core requests
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status=~"4.*"}
+            time_range: 5m
+          -
+            name: CNCC Core Error Responses
+            description: Total number of error responses sent for CNCC Core requests
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status=~"4.*|5.*"}
+            time_range: 5m
+          -
+            name: CNCC Core Request Processing Time-Ingress only
+            description: Time taken for processing the request by CNCC Core Ingress gateway.
+            filter: oc_ingressgateway_request_processing_latency{InstanceIdentifier=cncc-core_ingressgateway}
+            time_range: 5m
+          -
+            name: CNCC Core Request Processing Time
+            description: Total time taken for processing the CNCC Core request
+            filter: oc_ingressgateway_request_latency{InstanceIdentifier=cncc-core_ingressgateway}
+            time_range: 5m
+          -
+            name: CNCC Core SCP Requests
+            description: Total number of requests received by CNCC Core for SCP
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/ocscp/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core NRF Requests Single Route_path
+            description: Total number of requests received by CNCC Core for NRF
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/nrf-configuration/v1/*.*"}
+            time_range: 5m
+          -
+            name: CNCC Core UDR Requests Single Route_path
+            description: Total number of requests received by CNCC Core for UDR
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/nudr-config/.**"}
+            time_range: 5m
+          -
+            name: CNCC Core UDR Requests Multiple Route_path
+            description: Total number of requests received by CNCC Core for UDR
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*cncc-core_ingressgateway",Route_path=~".*/nudr-dr-prov/.*|.*/nudr-dr-mgm/.*|.*/nudr-group-id-map-prov/.*|.*/slf-group-prov/.*|.*/nudr-config/.*"|.*/udr/nf-common-component/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core POLICY Requests Single Route_path
+            description: Total number of requests received by CNCC Core for POLICY
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/policyapi/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core POLICY Requests Multiple Route_path
+            description: Total number of requests received by CNCC Core for POLICY
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/policyapi/.*|.*/oc-cnpolicy-configuration/.*|.*/pcf/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core BSF Requests Single Route_path
+            description: Total number of requests received by CNCC Core for BSF
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/bsfapi/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core SCP Responses Single Route_path
+            description: Total number of responses sent by CNCC Core for SCP
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/ocscp/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core NRF Responses Single Route_path
+            description: Total number of responses sent by CNCC Core for NRF
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/nrf-configuration/v1/.**"}
+            time_range: 5m
+          -
+            name: CNCC Core UDR Responses Single Route_path
+            description: Total number of responses sent by CNCC Core for UDR
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/nudr-dr-prov/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core UDR Responses Multiple Route_path
+            description: Total number of responses sent by CNCC Core for UDR
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=cncc-core_ingressgateway,Status=200 OK,Method=GET,Route_path=~/nudr-dr-prov/.*|/nudr-dr-mgm/.*|/nudr-group-id-map-prov/.*|/slf-group-prov/.*|nudr-config/.*}
+            time_range: 5m
+          -
+            name: CNCC Core POLICY responses Single Route_path
+            description: Total number of responses sent by CNCC Core for POLICY
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/policyapi/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core POLICY responses Multiple Route_path
+            description: Total number of responses sent by CNCC Core for POLICY
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/policyapi/.*|.*/oc-cnpolicy-configuration/.*|.*/pcf/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core BSF responses Single Route_path
+            description: Total number of responses sent by CNCC Core for BSF
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/bsfapi/.*"}
+            time_range: 5m
+          -
+            name: CNCC IAM Requests
+            description: Total number of requests received by CNCC IAM
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*cncc-core_ingressgateway"}
+            time_range: 5m
+          - 
+            name: CNCC IAM Response
+            description: Total number of responses sent by CNCC IAM
+            filter: p_responses_total{InstanceIdentifier=~".*cncc-iam_ingress
+            time_range: 5m
+          -
+            name: CNCC IAM Success Responses
+            description: Total number of success responses (2xx) for CNCC IAM
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",Status=~"2.*
+            time_range: 5m
+          -
+            name: CNCC IAM 5xx Responses
+            description: Total number of error responses (5xx) for CNCC IAM
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",Status=~"5.*"}
+            time_range: 5m
+          -
+            name: CNCC IAM 4xx Responses
+            description: Total number of error responses (4xx) for CNCC IAM
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",Status=~"4.*"}
+            time_range: 5m
+          -
+            name: CNCC IAM Error Responses
+            description: Total number of error responses for CNCC IAM
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",Status=~"4.*|5.*"}
+            time_range: 5m
+          -
+            name: CNCC IAM Request Processing Time- Ingress only
+            description: Time taken for processing the request by Ingress gateway.
+            filter: oc_ingressgateway_request_processing_latency{InstanceIdentifier=cncc-iam_ingressgateway}
+            time_range: 5m
+          -
+            name: CNCC IAM Request Processing Time
+            description: Total time taken for processing the request
+            filter: oc_ingressgateway_request_latency{InstanceIdentifier=cncc-iam_ingressgateway}
+            time_range: 5m
+          -
+            name: CNCC IAM Access Token Request
+            description: Total number of access token requests received for CNCC IAM
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",ResourcePath="/cncc/auth/realms/master/protocol/openid-connect/token"}
+            time_range: 5m
+          -
+            name: CNCC IAM Access Token Granted
+            description: Total number of access token granted for CNCC IAM
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",ResourcePath="/cncc/auth/realms/master/protocol/openid-connect/token",Status="200 OK"}
+            time_range: 5m
+          -
+            name: CNCC IAM Access Token Not Granted
+            description: Total number of access token not granted for CNCC IAM
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",ResourcePath="/cncc/auth/realms/master/protocol/openid-connect/token",Status=~"4.*|5.*"}
+            time_range: 5m
+          -
+            name: CNCC IAM User Login Failure Responses
+            description: Total number of user login failure at CNCC IAM
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",ResourcePath="/cncc/auth/realms/master/login-actions/authenticate",Status="200 OK"}
+            time_range: 5m
+          -
+            name: CNCC Core Access Token Request
+            description: Total number of access token requests received for CNCC Core
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",ResourcePath="/cncc/auth/realms/cncc/protocol/openid-connect/token"}
+            time_range: 5m
+          -
+            name: CNCC Core Access Token Granted Responses
+            description: Total number of access token granted for CNCC Core
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",ResourcePath="/cncc/auth/realms/cncc/protocol/openid-connect/token",Status="200 OK"}
+            time_range: 5m
+          -
+            name: CNCC Core Access Token Not Granted Responses
+            description: Total number of access token not granted for CNCC Core
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",ResourcePath="/cncc/auth/realms/cncc/protocol/openid-connect/token",Status=~"4.*|5.*"}
+            time_range: 5m
+          -
+            name: CNCC Core User Login Failure Responses
+            description: Total number of user login failure at CNCC Core
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*cncc-iam_ingressgateway",ResourcePath="/cncc/auth/realms/cncc/login-actions/authenticate",Status="200 OK"}
+            time_range: 5m
+          -
+            name: CNCC Core User Authorization Failure Responses
+            description: Total number of authorization failure responses while accessing NF services at CNCC Core
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="403 FORBIDDEN", ResourceType!="UNKNOWN"}
+            time_range: 5m
+          -
+            name: CNCC Core BSF Requests Multiple Route_path
+            description: Total number of requests received by CNCC Core for BSF
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/bsfapi/.*|.*/oc-bsf-configuration/.*|.*/bsf/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core BSF responses Multiple Route_path
+            description: Total number of responses sent by CNCC Core for BSF
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/bsfapi/.*|.*/oc-bsf-configuration/.*|.*/bsf/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core NRF Requests Multiple Route_path
+            description: Total number of requests received by CNCC Core for NRF
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/nrf-configuration/v1/.*|.*/nrf-state-data/.*|.*/ocnrf-swagger/.*|.*/nrf-status-data/.*|.*/nrf/nf-common-component/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core NRF Responses Multiple Route_path
+            description: Total number of responses sent by CNCC Core for NRF
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/nrf-configuration/.*|.*/nrf-state-data/.*|.*/ocnrf-swagger/.*|.*/nrf-status-data/.*|.*/nrf/nf-common-component/.*|.*nrf-configuration/v1/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core SEPP Requests Single Route_path
+            description: Total number of requests received by CNCC Core for SEPP
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/sepp-configuration/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core SEPP Requests Multiple Route_path
+            description: Total number of requests received by CNCC Core for SEPP
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/sepp-configuration/.*|.*/sepp/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core SEPP Responses Single Route_path
+            description: Total number of responses sent by CNCC Core for SEPP
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/sepp-configuration/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core SEPP Responses Multiple Route_path
+            description: Total number of responses sent by CNCC Core for SEPP
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/sepp-configuration/.*|.*/sepp/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core NSSF Requests
+            description: Total number of requests received by CNCC Core for NSSF
+            filter: oc_ingressgateway_http_requests_total{InstanceIdentifier=~".*core_ingressgateway",Route_path=~".*/nnssf-configuration/.*|.*/nssf/.*"}
+            time_range: 5m
+          -
+            name: CNCC Core NSSF Responses
+            description: Total number of responses sent by CNCC Core for NSSF
+            filter: oc_ingressgateway_http_responses_total{InstanceIdentifier=~".*core_ingressgateway",Status="200 OK",Method="GET",Route_path=~".*/nnssf-configuration/.*|.*/nssf/.*"}
+            time_range: 5m
+      -
+        name: DB-Tier
+        namespace: cpcfdph01-dbtier-occnp
+        metrics:
+          -
+            name: db_tier_local_operations
+            description: Total number of local operations in DBTier for the node
+            filter: none
+            range_time : 5m
+          -
+            name: db_tier_transactions
+            description: Total number of transactions in DBTier for the node
+            filter: none
+            range_time : 5m
+          -
+            name: db_tier_commits
+            description: Total number of commits in DBTier for the node.
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_reads
+            description: Total number of reads in DBTier for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_local_reads
+            description: Total number of local reads in DBTier for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_writes
+            description: Total number of writes in DBTier cluster for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_local_writes
+            description: Total number of local writes in DBTier for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_aborts
+            description: Total number of aborted transactions in DBTier for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_table_scans
+            description: Total no of table scan in DBTier for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_range_scans
+            description: Total number of range scans in DBTier for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_transporter_overload
+            description: Transporter overload in DBTier for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_scan_slowdown
+            description: Scan slowdown in DBTier for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_cpu_os_user
+            description: Indicates the CPU user statistics per thread for the specific node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_cpu_os_system
+            description: Indicates the CPU system statistics per thread for the specific node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_cpu_os_idle
+            description: Indicates the Idle CPU statistics per thread for the specific node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_memory_used_bytes
+            description: Memory used for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_memory_total_bytes
+            description: Total memory for the node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_binlog_used_bytes_percentage
+            description: Percentage of total memory used by bin log in the SQL node
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_replication_slave_delay
+            description: Number of seconds with which the last record read by the slave is behind the latest record written by the master
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_backup_used_disk_percentage
+            description: This metrics is pegged after old backups are purged and a new one is created
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_backup_size
+            description: This metric is pegged when a backup completes successfully
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_backup
+            description: This metric is pegged at each stage of its lifecycle on creation, when it fails or completes, and when it is deleted
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_node_status
+            description: DBTier node status of the node with Node ID as "node_id", Node Type as "node_type" and Node version as "node_version"
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_disaster_recovery_state
+            description: This metric gives whether the current site is undergoing Disaster Recovery
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_api_trans_commit_count
+            description: This metric provides the information about number of transactions committed by this replica
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_api_wait_exec_complete_count
+            description: This metric provides the information about number of times a thread has been blocked by this replica while waiting for execution of an operation to complete
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_api_bytes_sent_count
+            description: This metric provides the information about amount of data (in bytes) sent to the data nodes by this replica
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_api_pk_op_count
+            description: This metric provides the information about number of operations by this replica based on or using primary keys
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_node_transporter_bytes_sent
+            description: This metric provides the information about the bytes sent from data node to other nodes
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_node_transporter_bytes_received
+            description: This metric provides the information about the bytes received from data node to other nodes
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_node_transporter_overload_count
+            description: This metric provides information about number of times this connection has entered overload state since connecting
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_node_transporter_slowdown_count
+            description: This metric provides information about number of times this connection has entered slowdown state since connecting
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_threadstat_os_time
+            description: This metric provides the information about the OS time of the thread. (ms)
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_threadstat_os_user_cpu_time
+            description: This metric provides the information about the OS CPU time taken by the user. (µs)
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_threadstat_os_system_cpu_time
+            description: This metric provides the information about the OS CPU time taken by the system. (µs)
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_threadstat_os_voluntary_context_switches
+            description: This metric provides the information about the number of OS voluntary context switches happened
+            filter: none
+            range_time: 5m
+          -
+            name: db_tier_threadstat_os_involuntary_context_switches
+            description: This metric provides the information about the number of OS involuntary context switches happened
+            filter: none
+            range_time: 5m
+      -
+        name: CNCP
+        namespace: cpcfdph01-data-occnp
+        metrics:
+          -
+            name: ocpm_egress_request_total
+            description: Total number of egress requests received
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_udr_tracking_request_total
+            description: Total number of UDR tracking request
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_chf_tracking_request_total
+            description: Total number of CHF tracking requests
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_egress_response_total
+            description: Total number of egress responses
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_udr_tracking_response_total
+            description: Total number of UDR tracking responses
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_chf_tracking_response_total
+            description: Total number of CHF tracking responses
+            filter: none
+            range_time: 5m
+          -
+            name: server_request_total
+            description: Total number of server requests
+            filter: none
+            range_time: 5m
+          -
+            name: server_response_total
+            description: Total number of responses from the server
+            filter: none
+            range_time: 5m
+          -
+            name: ldap_response_total
+            description: Total number of LDAP responses
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_binding_inbound_response_total
+            description: Total number of inbound requests
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_ingress_request_total
+            description: Total number of ingress requests received
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_ingress_response_total
+            description: Total number of ingress responses
+            filter: none
+            range_time: 5m
+          -
+            name: client_request_total
+            description: Total number of client requests
+            filter: none
+            range_time: 5m
+          -
+            name: client_response_total
+            description: Total number of responses from the client
+            filter: none
+            range_time: 5m
+          -
+            name: ldap_request_total
+            description: Total number of LDAP requests
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_binding_inbound_request_total
+            description: none
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_sm_binding_request_total
+            description: Total number of binding requests
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_sm_binding_response_total
+            description: Total number of binding responses
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_sm_binding_ex_total
+            description: The number of binding operations that cannot be performed due to an exception (timeout)
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_egress_request_timeout_total
+            description: Total number of request timeouts from SMF
+            filter: none
+            range_time: 5m
+          -
+            name: remote_delete_notify_total
+            description: Total number of notifications for session delete requests at SM service
+            filter: none
+            range_time: 5m
+          -
+            name: audit_notifications_sent
+            description: Number of notifications sent by SM Service to SMF to check whether the session is stale or not
+            filter: none
+            range_time: 5m
+          -
+            name: audit_update_notify_session_not_found
+            description: Number of 404 response sent by SMF for the records which are identified as stale by Audit Service
+            filter: none
+            range_time: 5m
+          -
+            name: audit_update_notify_session_found
+            description: Number of 204 response sent by SMF for the records which are identified as stale by Audit Service
+            filter: none
+            range_time: 5m
+          -
+            name: audit_update_notify_response_error
+            description: Number of update notify requests sent to SMF by SM service that were responded with an error code (except 404)
+            filter: none
+            range_time: 5m
+          -
+            name: audit_update_notify_request_error
+            description: Number of update notify requests that could not be sent to SMF or timed out
+            filter: none
+            range_time: 5m
+          -
+            name: audit_update_timestamp_cnt
+            description: Number of records whose LASTACESSTIME column is updated by SM Service when it receives 204 response from SMF
+            filter: none
+            range_time: 5m
+          -
+            name: audit_delete_records_count
+            description: Number of records deleted by SM Service when it receives 404 response from SMF
+            filter: none
+            range_time: 5m
+          -
+            name: audit_delete_records_max_ttl_count
+            description: Number of records deleted by SM Service when the max TTL was reached
+            filter: none
+            range_time: 5m
+          -
+            name: am_audit_update_notify_sent_total
+            description: Total number of audit notifications sent
+            filter: none
+            range_time: 5m
+          -
+            name: am_audit_update_notify_session_not_found_total
+            description: Total number of 'session not found' notifications
+            filter: none
+            range_time: 5m
+          -
+            name: am_audit_update_notify_session_found_total
+            description: Total number of 'session found' notifications
+            filter: none
+            range_time: 5m
+          -
+            name: am_audit_update_timestamp_cnt_total
+            description: Total number of timestamp countfor audit requests
+            filter: none
+            range_time: 5m
+          -
+            name: am_audit_delete_records_count_total
+            description: Total number of delete audit records requests
+            filter: none
+            range_time: 5m
+          -
+            name:  am_audit_delete_records_max_ttl_count_total
+            description: Number of records deleted by AM service when the max TTL was reached
+            filter: none
+            range_time: 5m
+          -
+            name: am_audit_amf_query_total
+            description: none
+            filter: none
+            range_time: 5m
+          -
+            name: am_audit_update_notify_response_error_total
+            description: Number of update notify requests sent to AMF by AM service that were responded with an error code
+            filter: none
+            range_time: 5m
+          -
+            name: ue_n1_ursp_rule_delivery
+            description: This metric shall be incremented when a URSP rule is selected for delivery to UE
+            filter: none
+            range_time: 5m
+          -
+            name: ue_n1_transfer_request
+            description: This metric shall be incremented when PCF sends an encoded N1 message (fragment) to AMF for delivery to UE
+            filter: none
+            range_time: 5m
+          -
+            name: ue_n1_transfer_response
+            description: This metric shall be incremented when PCF receives a response from AMF for an N1 message (fragment) delivery to UE
+            filter: none
+            range_time: 5m
+          -
+            name: ue_n1_transfer_exception
+            description: This metric shall be incremented when PCF encounters an exception and fails to initiate an N1 message (fragment) delivery
+            filter: none
+            range_time: 5m
+          -
+            name: ue_n1_transfer_retransmit
+            description: This metric shall be incremented when PCF retransmits an encoded N1 message (fragment) to AMF for delivery to UE
+            filter: none
+            range_time: 5m
+          -
+            name: ue_n1_transfer_abort
+            description: This metric shall be incremented when PCF aborts an N1 message delivery procedure
+            filter: none
+            range_time: 5m
+          -
+            name: ue_n1_transfer_skip
+            description: This metric shall be incremented when PCF skips an N1 message fragment
+            filter: none
+            range_time: 5m
+          -
+            name: ue_n1_transfer_failure_notification
+            description: This metric shall be incremented when PCF receives a transfer failure notification from the AMF
+            filter: none
+            range_time: 5m
+          -
+            name: ue_n1_transfer_ue_notification
+            description: This metric shall be incremented when PCF receives an N1 notification from the UE
+            filter: none
+            range_time: 5m
+          -
+            name: session_viewer_request_total
+            description: This metric shows the total number of query requests made using the Session Viewer
+            filter: none
+            range_time: 5m
+          -
+            name: session_viewer_response_total
+            description: This metric shows the total number of responses to query requests made using the Session Viewer
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_ar_setup_total
+            description: Track number of registration request sent to alternate route service
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_ar_request_total
+            description: Tracks number of alternate routing attempts to producer or consumer on Initial, Subsequent, or Notification messages
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_ar_response_total
+            description: Tracks response on number of alternate routing attempts to producer or consumer on Initial, Subsequent, or Notification messages
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_ar_lookup_request_total
+            description: Track number of time alternate route lookup was done for a given scheme+FQDN
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_ar_lookup_response_total
+            description: Tracks response codes for request to "alternateRoute" service
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_udr_tracking_request_timeout_total
+            description: Total number of UDR request timeouts
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_chf_tracking_request_timeout_total
+            description: Total number of CHF request timeouts
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_diam_conn_network
+            description: Tracks active diameter connections with network peers
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_diam_conn_app_network
+            description: Tracks active diameter connections with network peers that support given application ID
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_diam_request_network_total
+            description: Tracks total number of request messages of given command code to or from network
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_diam_response_network_total
+            description: Tracks total number of answer messages of given command code to or from network
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_diam_conn_local
+            description: Tracks active diameter connections with local services
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_diam_conn_app_local
+            description: Tracks active diameter connections with local services that support given application id. Increment this metric for each application Id supported over connection, such as intersection of application ID in CER and CEA
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_diam_request_local_total
+            description: Tracks total number of request messages of given command code to or from local service
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_diam_response_local_total
+            description: Tracks total number of answer messages of given command code to or from local service
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_http_out_conn_request_total
+            description: Total number of http connection requests
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_http_out_conn_response_total
+            description: Total number of http connection responses
+            filter: none
+            range_time: 5m
+          -
+            name: diam_overload_msg_reject_total
+            description: Total number of messages rejected due to overload control
+            filter: none
+            range_time: 5m
+          -
+            name: remove_contextInfo_total
+            description: Total number of context infos deleted once the column length has reached the configured limit, that is, 4000 characters
+            filter: none
+            range_time: 5m
+          -
+            name: revalidation_request
+            description: This metric is incremented when the revalidation is required for a datasource. It is also incremented when revalidation for a subscription failed with 404 but reattempt is done for the request
+            filter: none
+            range_time: 5m
+          -
+            name: revalidation_response
+            description: This metric is incremented when any of the following responses are received for revalidation request
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_binding_query_request_count
+            description: This metric tracks the total number of Audit Notify requests received from BSF
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_binding_query_response_count
+            description: This metric tracks the total number of successful responses sent to BSF for Audit Notify requests
+            filter: none
+            range_time: 5m
+          -
+            name: audit_recs_stale
+            description: Number of records detected as stale
+            filter: none
+            range_time: 5m
+          -
+            name: audit_recs_notif
+            description: Number of stale record notifications sent, applicable for modes NOTIFY and DELETE_NOTIFY
+            filter: none
+            range_time: 5m
+          -
+            name: audit_recs_remv
+            description: Number of stale records deleted, applicable for modes DELETE and DELETE_NOTIFY
+            filter: none
+            range_time: 5m
+          -
+            name: audit_recs_remv_ex
+            description: Number of exceptions hit during attempt to delete a stale record
+            filter: none
+            range_time: 5m
+          -
+            name: audit_recs_notif_ex
+            description: Number of exceptions hit during attempt to notify
+            filter: none
+            range_time: 5m
+          -
+            name: audit_recs_notif_err
+            description: Number of error responses received for notifications sent
+            filter: none
+            range_time: 5m
+          -
+            name: audit_recs_deque_for_notif
+            description: Number of stale records dequeued to send Notification
+            filter: none
+            range_time: 5m
+          -
+            name: audit_recs_enque_for_notif
+            description: Number of stale records enqueued from Database
+            filter: none
+            range_time: 5m
+          -
+            name: audit_recs_enque_err
+            description: Number of stale records failed to enqueue if Queue is full
+            filter: none
+            range_time: 5m
+          -
+            name: oc_db_active_session_count
+            description: Reports the session for a given service e.g. SM session
+            filter: none
+            range_time: 5m
+          - 
+            name: oc_db_records_count
+            description: Reports the number of records in table that is being monitored by audit service
+            filter: none
+            range_time: 5m
+          -
+            name: queryservice_sessionDelete_request_total
+            description: Total number of delete SM service query requests
+            filter: none
+            range_time: 5m
+          -
+            name: queryservice_sessionDelete_response_total
+            description: Total number of responses for delete SM service query
+            filter: none
+            range_time: 5m
+          -
+            name: appinfo_service_running
+            description: Provides the status of monitored services
+            filter: none
+            range_time: 5m
+          -
+            name: appinfo_category_running
+            description: Provides the status of monitored categories
+            filter: none
+            range_time: 5m
+          -
+            name: appinfo_category_good
+            description: Provides the readiness of monitored categories
+            filter: none
+            range_time: 5m
+          -
+            name: nf_load_info
+            description: Provides information about service load
+            filter: none
+            range_time: 5m
+          -
+            name: jvm_cpu_usage
+            description: Springboot per service jvm_cpu_usage
+            filter: none
+            range_time: 5m
+          -
+            name: jvm_memory
+            description: Springboot per service jvm_memory
+            filter: none
+            range_time: 5m
+          -
+            name: cgroup_cpu_nanoseconds
+            description: Reports the total CPU time (in nanoseconds) on each CPU core for all the tasks in the cgroup
+            filter: none
+            range_time: 5m
+          -
+            name: cgroup_memory_bytes
+            description: Reports the memory usage
+            filter: none
+            range_time: 5m
+          -
+            name: load_level
+            description: Provides information about the overload manager load level
+            filter: none
+            range_time: 5m
+          - 
+            name: occnp_pod_congestion_state
+            description: Tracks congestion state of pod
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_pod_resource_stress
+            description: Tracks CPU, memory, queue usage (percentage) based on which POD is calculating its congestion state
+            filter: none
+            range_time: 5m
+          -
+            name: occnp_pod_resource_congestion_state
+            description: Tracks individual resource's congestion state calculated based on the resource usage and configured threshold
+            filter: none
+            range_time: 5m
+          -
+            name: diam_congestion_message_reject_total
+            description: Tracks number of messages rejected due to congestion
+            filter: none
+            range_time: 5m
+          -
+            name: ocpm_send_internal_failure_total
+            description: This counter metric indicates the number of times SM service detected a timeout in a request that it made to PDS
+            filter: none
+            range_time: 5m
+          -
+            name: http_notification_request
+            description: This metric tracks the total number of requests towards a given destination
+            filter: none
+            range_time: 5m
+          -
+            name: http_notification_response
+            description: This metric tracks the total number of responses from a given destination 
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_ingress_request
+            description: This metric is incremented when Usage Monitoring service receives an incoming HTTP request message
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_ingress_response
+            description: This metric is incremented when Usage Monitoring service responds to an incoming HTTP request message
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_profile_activated
+            description: This metric is incremented when UM Data Limit Profile is activated
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_profile_selected
+            description: This metric is incremented when UM Data Limit Profile is selected
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_grant_success
+            description: This metric is incremented when a grant is successfully allocated from a given UM Data Limit Profile
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_grant_failure
+            description: This metric is incremented when a grant could not be allocated from a given UM Data Limit Profile
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_usage_reported
+            description: This metric is incremented when usage report is processed for a given UM Data Limit Profile
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_usage_threshold
+            description: This metric is incremented when usage usage crosses a particular threshold level
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_usage_reset
+            description: This metric is incremented when usage is reset according to the reset time in a given UM Data Limit Profile
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_egress_pds_request
+            description: This metric is incremented when Usage Monitoring service sends a request to PDS service
+            filter: none
+            range_time: 5m
+          -
+            name: usage_mon_egress_pds_response
+            description: This metric is incremented when Usage Monitoring service receives a response from PDS service
+            filter: none
+            range_time: 5m
+          -
+            name: lock_request_total
+            description: Total number of lock requests received at Bulwark per service or pod
+            filter: none
+            range_time: 5m
+          -
+            name: lock_response_total
+            description: Total number of lock responses sent by Bulwark per service or pod
+            filter: none
+            range_time: 5m
+      

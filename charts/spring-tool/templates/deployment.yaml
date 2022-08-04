@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "spring.fullname" . }}
+  labels:
+    {{- include "spring.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.spring.autoscaling.enabled }}
+  replicas: {{ .Values.spring.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "spring.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "spring.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "spring.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.spring.securityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.spring.image.repository }}:{{ .Values.spring.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.spring.image.pullPolicy }}
+          env:
+            - name: SPRING_CONFIG_NAME
+              value: application,jdbc
+            - name: SPRING_CONFIG_LOCATION
+              value: /root/application.properties
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - echo "Hello"
+            periodSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - echo "Hello"
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: {{ .Values.spring.volumeMounts.mountPath }}
+              name: {{ .Values.spring.volumeMounts.name }}
+            - mountPath: /root
+              name: {{ .Values.configmap.name }}
+            - mountPath: {{ .Values.secret.mountPath }}
+              name: {{ .Values.secret.name }}
+      volumes:
+      - name: {{ .Values.spring.volumeMounts.name }}
+        persistentVolumeClaim:
+          claimName: {{ .Values.volumeClaimTemplate.name }}
+      - name: {{ .Values.configmap.name }}
+        configMap:
+          name: {{ .Values.configmap.name }}
+      - name: {{ .Values.secret.name }}
+        secret:
+          secretName: {{ .Values.secret.name }}
+          defaultMode: 0600
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
