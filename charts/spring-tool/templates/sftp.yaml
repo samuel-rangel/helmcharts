@@ -1,0 +1,56 @@
+{{- if .Values.sftpServerTest.enabled -}}
+#user config map
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-config
+data:
+  users.conf: {{ .Values.sftpServerTest.config }} 
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sftp-pod
+  labels:
+    app: sftp-pod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sftp-pod
+  template:
+    metadata:
+      labels:
+        app: sftp-pod
+    spec:
+      containers:
+        - name: sftp-pod
+          image: {{ .Values.sftpServerTest.image }} 
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/sftp/
+              readOnly: true
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 22
+          securityContext: {}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: user-config
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: sftp-service
+spec:
+  type: ClusterIP
+  clusterIP: {{ .Values.sftpServerTest.host }}
+  ports:
+    - name: 'ssh'
+      port: {{ .Values.sftpServerTest.port }}
+      targetPort: 22
+      protocol: TCP
+  selector:
+    app: sftp-pod
+{{- end }}
