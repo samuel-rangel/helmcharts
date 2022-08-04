@@ -1,0 +1,24 @@
+apiVersion: v1
+entries:
+  snmp-notifier:
+  - apiVersion: v1
+    appVersion: "1.1"
+    created: "2022-08-04T15:48:55.2527942-05:00"
+    description: A Helm chart for snmp-notifier webhook
+    digest: 510a01aad6ebcd6cc9bae2d130051e56ed33d25854445ec65d41b82bd4f5d2f9
+    name: snmp-notifier
+    urls:
+    - https://samuel-rangel.github.io/helmcharts/charts/snmp-notifier-0.2.0.tgz
+    version: 0.2.0
+  spring:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2022-08-04T15:48:55.2543898-05:00"
+    description: A Helm chart for Spring
+    digest: f682e9d6bb4beee06cdd5215a6398750cc5f03ef5c3a5dddb8fec05977b254b0
+    name: spring
+    type: application
+    urls:
+    - https://samuel-rangel.github.io/helmcharts/charts/spring-1.0.0.tgz
+    version: 1.0.0
+generated: "2022-08-04T15:48:55.2521855-05:00"
